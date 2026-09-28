@@ -172540,6 +172540,110 @@
           }
         }
       ]
+    },
+    {
+      "name": "119. Anthropic instructions coexistence",
+      "description": "Responses instructions and leading system/developer messages must both reach Anthropic. Inspect the upstream request instead of relying on model obedience. Streaming and non-streaming use the same converter.",
+      "item": [
+        {
+          "name": "Anthropic claude-haiku-4-5 instructions coexistence with system",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Anthropic accepts request', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "pm.test('Both instruction sources reach Anthropic in order', function () {",
+                  "  var body = pm.response.json();",
+                  "  var raw = (body.extra_fields || {}).raw_request;",
+                  "  if (typeof raw === 'string') { raw = JSON.parse(raw); }",
+                  "  pm.expect(raw, 'missing upstream request: ' + pm.response.text()).to.be.an('object');",
+                  "  pm.expect(raw.system).to.be.an('array');",
+                  "  pm.expect(raw.system.map(function (block) { return block.text; })).to.eql(['BASE_MUST_SURVIVE', 'APP_MUST_SURVIVE']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-bf-send-back-raw-request",
+                "value": "true"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"anthropic/claude-haiku-4-5\",\n  \"instructions\": \"BASE_MUST_SURVIVE\",\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"APP_MUST_SURVIVE\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Reply only OK.\"\n    }\n  ],\n  \"max_output_tokens\": 32\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/responses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "responses"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Anthropic claude-haiku-4-5 instructions coexistence with developer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Anthropic accepts request', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "pm.test('Both instruction sources reach Anthropic in order', function () {",
+                  "  var body = pm.response.json();",
+                  "  var raw = (body.extra_fields || {}).raw_request;",
+                  "  if (typeof raw === 'string') { raw = JSON.parse(raw); }",
+                  "  pm.expect(raw, 'missing upstream request: ' + pm.response.text()).to.be.an('object');",
+                  "  pm.expect(raw.system).to.be.an('array');",
+                  "  pm.expect(raw.system.map(function (block) { return block.text; })).to.eql(['BASE_MUST_SURVIVE', 'APP_MUST_SURVIVE']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-bf-send-back-raw-request",
+                "value": "true"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"anthropic/claude-haiku-4-5\",\n  \"instructions\": \"BASE_MUST_SURVIVE\",\n  \"input\": [\n    {\n      \"role\": \"developer\",\n      \"content\": \"APP_MUST_SURVIVE\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Reply only OK.\"\n    }\n  ],\n  \"max_output_tokens\": 32\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/responses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "responses"
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }

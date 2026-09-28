@@ -482,6 +482,82 @@ func TestBuildAnthropicResponsesRequestBody_CountTokensMode(t *testing.T) {
 	})
 }
 
+// TestBuildAnthropicResponsesRequestBody_Instructions 验证最终请求保留两处指令、顺序和缓存元数据。
+func TestBuildAnthropicResponsesRequestBody_Instructions(t *testing.T) {
+	cases := []struct {
+		name         string
+		instructions *string
+		prefix       string
+		want         []string
+		cached       bool
+	}{
+		{name: "instructions_only", instructions: schemas.Ptr("BASE"), want: []string{"BASE"}},
+		{name: "developer_only", prefix: `{"role":"developer","content":"APP"},`, want: []string{"APP"}},
+		{name: "empty_instructions", instructions: schemas.Ptr(""), prefix: `{"role":"system","content":"SYS"},`, want: []string{"SYS"}},
+		{name: "instructions_and_developer", instructions: schemas.Ptr("BASE"), prefix: `{"role":"developer","content":"APP"},`, want: []string{"BASE", "APP"}},
+		{name: "instructions_and_system", instructions: schemas.Ptr("BASE"), prefix: `{"role":"system","content":"SYS"},`, want: []string{"BASE", "SYS"}},
+		{name: "ordered_cached_blocks", instructions: schemas.Ptr("BASE"), prefix: `{"role":"system","content":"SYS"},{"role":"developer","content":[{"type":"input_text","text":"APP","cache_control":{"type":"ephemeral"}}]},`, want: []string{"BASE", "SYS", "APP"}, cached: true},
+	}
+	for _, tc := range cases {
+		for _, streaming := range []bool{false, true} {
+			// 同一输入重复转换，防止追加指令修改调用方的消息内容。
+			t.Run(fmt.Sprintf("%s/stream=%v", tc.name, streaming), func(t *testing.T) {
+				var input []schemas.ResponsesMessage
+				if err := json.Unmarshal([]byte("["+tc.prefix+`{"role":"user","content":"hi"}]`), &input); err != nil {
+					t.Fatal(err)
+				}
+				req := &schemas.BifrostResponsesRequest{Provider: schemas.Anthropic, Model: "claude-opus-4-6", Input: input, Params: &schemas.ResponsesParameters{Instructions: tc.instructions}}
+				before, err := json.Marshal(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for range 2 {
+					ctx := schemas.NewBifrostContext(context.Background(), time.Time{})
+					body, buildErr := BuildAnthropicResponsesRequestBody(ctx, req, AnthropicRequestBuildConfig{Provider: schemas.Anthropic, IsStreaming: streaming})
+					if buildErr != nil {
+						t.Fatal(buildErr)
+					}
+					var decoded AnthropicMessageRequest
+					if err := json.Unmarshal(body, &decoded); err != nil {
+						t.Fatal(err)
+					}
+					if decoded.System == nil {
+						t.Fatalf("missing system: %s", body)
+					}
+					var got []string
+					if decoded.System.ContentStr != nil {
+						got = append(got, *decoded.System.ContentStr)
+					}
+					for _, block := range decoded.System.ContentBlocks {
+						if block.Text != nil {
+							got = append(got, *block.Text)
+						}
+					}
+					if !slices.Equal(got, tc.want) {
+						t.Errorf("system = %q, want %q", got, tc.want)
+					}
+					if tc.cached {
+						blocks := decoded.System.ContentBlocks
+						if len(blocks) == 0 || blocks[len(blocks)-1].CacheControl == nil || blocks[len(blocks)-1].CacheControl.Type != "ephemeral" {
+							t.Errorf("cache marker lost: %s", body)
+						}
+					}
+					if len(decoded.Messages) != 1 {
+						t.Errorf("messages = %d, want 1", len(decoded.Messages))
+					}
+				}
+				after, err := json.Marshal(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(before) != string(after) {
+					t.Error("conversion mutated input")
+				}
+			})
+		}
+	}
+}
+
 func TestBuildAnthropicResponsesRequestBody_TypedPath(t *testing.T) {
 	t.Run("typed_path_basic_request", func(t *testing.T) {
 		ctx := schemas.NewBifrostContext(context.Background(), time.Time{})

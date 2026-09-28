@@ -4290,6 +4290,7 @@ func (req *AnthropicMessageRequest) ToBifrostResponsesRequest(ctx *schemas.Bifro
 }
 
 // ToAnthropicResponsesRequest converts a BifrostRequest with Responses structure back to AnthropicMessageRequest
+// 将 Responses 指令和消息转换为 Anthropic 请求，保留互补的两处系统指令。
 func ToAnthropicResponsesRequest(ctx *schemas.BifrostContext, bifrostReq *schemas.BifrostResponsesRequest) (*AnthropicMessageRequest, error) {
 	if bifrostReq == nil {
 		return nil, fmt.Errorf("bifrost request is nil")
@@ -4726,12 +4727,8 @@ func ToAnthropicResponsesRequest(ctx *schemas.BifrostContext, bifrostReq *schema
 	if bifrostReq.Input != nil {
 		anthropicMessages, systemContent := ConvertBifrostMessagesToAnthropicMessages(ctx, bifrostReq.Input, true, caps)
 
-		// Set system message if present
-		if systemContent != nil {
-			anthropicReq.System = systemContent
-		} else if bifrostReq.Params != nil && bifrostReq.Params.Instructions != nil && *bifrostReq.Params.Instructions != "" {
-			// if no system content, check if instructions are present
-			// system messages take precedence over instructions
+		// Responses instructions precede, rather than replace, system/developer messages.
+		if bifrostReq.Params != nil && bifrostReq.Params.Instructions != nil && *bifrostReq.Params.Instructions != "" {
 			anthropicReq.System = &AnthropicContent{
 				ContentBlocks: []AnthropicContentBlock{
 					{
@@ -4740,6 +4737,9 @@ func ToAnthropicResponsesRequest(ctx *schemas.BifrostContext, bifrostReq *schema
 					},
 				},
 			}
+		}
+		if systemContent != nil {
+			anthropicReq.System = appendToSystemContent(anthropicReq.System, *systemContent)
 		}
 
 		// Set regular messages
